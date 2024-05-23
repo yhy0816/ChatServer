@@ -1,6 +1,7 @@
 #include "ChatServer.hpp"
 #include "json.hpp"
 #include "ChatService.hpp"
+#include <muduo/base/Logging.h>
 using namespace std;
 using namespace placeholders;
 using json = nlohmann::json;
@@ -40,9 +41,10 @@ void ChatServer::onMessage(const TcpConnectionPtr& conn,
     Timestamp time)
 {
     string buff = buf->retrieveAllAsString();
-    json js = json::parse(buf);
+    json js = json::parse(buff);
     // 通过 json[msgid]获取消息类型
     // 再通过getHandler 获取对应的业务处理函数， 再进行调用
-    auto MsgHandler = ChatService::instance()->getHandler(1);
-    // MsgHandler(conn, js, time);
+    LOG_INFO << js["msgid"].get<int>();
+    auto MsgHandler = ChatService::instance()->getHandler(js["msgid"].get<int>());
+    MsgHandler(conn, js, time);
 }
