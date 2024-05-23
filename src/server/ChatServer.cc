@@ -1,7 +1,9 @@
 #include "ChatServer.hpp"
-
+#include "json.hpp"
+#include "ChatService.hpp"
 using namespace std;
 using namespace placeholders;
+using json = nlohmann::json;
 
 ChatServer::ChatServer(EventLoop* loop,
     const InetAddress& listenAddr,
@@ -25,12 +27,22 @@ void ChatServer::start()
 }
 
 // 上报连接信息的回调函数
-void ChatServer::onConnection(const TcpConnectionPtr&)
+void ChatServer::onConnection(const TcpConnectionPtr& conn)
 {
+    // 客户端断开连接
+    if(!conn->connected()) {
+        conn->shutdown();
+    }
 }
 // 上报读写事件信息的回调函数
-void ChatServer::onMessage(const TcpConnectionPtr&,
-    Buffer*,
-    Timestamp)
+void ChatServer::onMessage(const TcpConnectionPtr& conn,
+    Buffer* buf,
+    Timestamp time)
 {
+    string buff = buf->retrieveAllAsString();
+    json js = json::parse(buf);
+    // 通过 json[msgid]获取消息类型
+    // 再通过getHandler 获取对应的业务处理函数， 再进行调用
+    auto MsgHandler = ChatService::instance()->getHandler(1);
+    // MsgHandler(conn, js, time);
 }
