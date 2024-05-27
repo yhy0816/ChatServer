@@ -45,6 +45,6 @@ void ChatServer::onMessage(const TcpConnectionPtr& conn,
     // 通过 json[msgid]获取消息类型
     // 再通过getHandler 获取对应的业务处理函数， 再进行调用
     LOG_INFO << js["msgid"].get<int>();
-    auto MsgHandler = ChatService::instance()->getHandler(js["msgid"].get<int>());
+    auto MsgHandler = ChatService::instance()->getHandler(js["msgid"].get<EnMsgType>());
     MsgHandler(conn, js, time);
 }

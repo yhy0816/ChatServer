@@ -13,7 +13,7 @@ public:
     bool connect();
     bool update(const string& sql);
     MYSQL_RES* query(const string& sql);
-
+    MYSQL* getConnection() const {return _conn;}
 private:
     MYSQL* _conn;
 };
