@@ -32,6 +32,7 @@ void ChatServer::onConnection(const TcpConnectionPtr& conn)
 {
     // 客户端断开连接
     if(!conn->connected()) {
+        ChatService::instance()->clientCloseException(conn);
         conn->shutdown();
     }
 }
@@ -41,7 +42,14 @@ void ChatServer::onMessage(const TcpConnectionPtr& conn,
     Timestamp time)
 {
     string buff = buf->retrieveAllAsString();
-    json js = json::parse(buff);
+    json js;
+    try{
+        js = json::parse(buff);
+    } catch (...) {
+        LOG_INFO << "解析 json 错误";
+        return;
+    }
+    
     // 通过 json[msgid]获取消息类型
     // 再通过getHandler 获取对应的业务处理函数， 再进行调用
     LOG_INFO << js["msgid"].get<int>();

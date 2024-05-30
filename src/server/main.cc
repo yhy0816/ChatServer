@@ -12,4 +12,4 @@ int main() {
     server.start();
     loop.loop();
 }
-//{"msgid" : 1, "id": 1, "password": "12356"}
+//{"msgid" : 1, "id": 1, "password": "123456"}

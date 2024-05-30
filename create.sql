@@ -1,6 +1,6 @@
 create database if not exists chat;
 
-use chat
+use chat;
 
 create table if not exists User (
 
