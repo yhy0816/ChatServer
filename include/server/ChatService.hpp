@@ -4,9 +4,10 @@
 #include <functional>
 #include <muduo/net/TcpServer.h>
 #include <mutex>
+#include "json.hpp"
 #include "GroupModel.hpp"
 #include "OfflineMsgModel.hpp"
-#include "json.hpp"
+#include "FriendModel.hpp"
 #include "UserModel.hpp"
 #include "MsgType.hpp"
 
@@ -38,7 +39,9 @@ public:
     // 处理加群消息
     void addGroup(const TcpConnectionPtr &conn ,json& js, Timestamp time);
     // 处理群聊消息
-    void GroupChat(const TcpConnectionPtr &conn ,json& js, Timestamp time);
+    void groupChat(const TcpConnectionPtr &conn ,json& js, Timestamp time);
+    // 处理同意好友请求的消息
+    void agreeFriendRequest(const TcpConnectionPtr &conn ,json& js, Timestamp time);
     // 获取消息对应的处理函数
     MsgHandler getHandler(EnMsgType msgId);
     
@@ -56,5 +59,5 @@ private:
     UserModel _userModel;
     OfflineMsgModel _offlineMsgModel;
     GroupModel _groupModel;
-
+    FriendModel _friendModel;
 };  

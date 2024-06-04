@@ -22,8 +22,8 @@ bool MySQL::connect(){
         password.c_str(), dbname.c_str(), 3306,
         nullptr, 0);
     if(p) {
-        mysql_query(_conn, "set names gbk"); // 防止中文乱码
-        LOG_INFO << "connect mysql success!";
+        mysql_query(_conn, "set names utf8"); // 防止中文乱码
+        // LOG_INFO << "connect mysql success!";
     } else {
         LOG_INFO << "connect mysql error!";
     }

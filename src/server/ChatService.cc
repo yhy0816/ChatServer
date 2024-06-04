@@ -19,7 +19,11 @@ ChatService::ChatService()
     _MsgHandlerMap.insert({ EnMsgType::ONE_CHAT_MSG, bind(&ChatService::oneChat, this, _1, _2, _3) });
     _MsgHandlerMap.insert({ EnMsgType::CREATE_GROUP_MSG, bind(&ChatService::createGroup, this, _1, _2, _3) });
     _MsgHandlerMap.insert({ EnMsgType::ADD_GROUP_MSG, bind(&ChatService::addGroup, this, _1, _2, _3) });
-    _MsgHandlerMap.insert({ EnMsgType::GROUP_CHAT_MSG, bind(&ChatService::GroupChat, this, _1, _2, _3) });
+    _MsgHandlerMap.insert({ EnMsgType::GROUP_CHAT_MSG, bind(&ChatService::groupChat, this, _1, _2, _3) });
+     // 这里把好友请求消息也交给私聊消息进行处理
+    _MsgHandlerMap.insert({ EnMsgType::FRIEND_REQUEST_MSG, bind(&ChatService::oneChat, this, _1, _2, _3)} );
+    _MsgHandlerMap.insert({ EnMsgType::FRIEND_AGREE_MSG, bind(&ChatService::agreeFriendRequest, this, _1, _2, _3)} );
+
 }
 
 // 获取消息对应的处理函数
@@ -72,6 +76,17 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
                 _offlineMsgModel.remove(user.getId());
                 respone["offlinemsg"] = offlineMsgs;
             }
+            // 查询这个用户的好友信息并返回
+            vector<User> friends = _friendModel.query(user.getId());
+            vector<json> jfriends;
+            for(auto& firend : friends) {
+                json js;
+                js["id"] = firend.getId();
+                js["name"] = firend.getName();
+                js["state"] = firend.getState();
+                jfriends.push_back(js);
+            }
+            respone["friends"] = jfriends;
         }
 
     } else {
@@ -195,7 +210,7 @@ void ChatService::addGroup(const TcpConnectionPtr& conn, json& js, Timestamp tim
     conn->send(respone.dump());
 }
 // 处理群聊消息
-void ChatService::GroupChat(const TcpConnectionPtr& conn, json& js, Timestamp time) { 
+void ChatService::groupChat(const TcpConnectionPtr& conn, json& js, Timestamp time) { 
     int userid = js["uid"].get<int>();
     int groupid = js["gid"].get<int>();
 
@@ -212,6 +227,13 @@ void ChatService::GroupChat(const TcpConnectionPtr& conn, json& js, Timestamp ti
 
     }
 
+}
+
+// 处理同意好友请求的消息
+void ChatService::agreeFriendRequest(const TcpConnectionPtr &conn ,json& js, Timestamp time) {
+    int uid = js["uid"].get<int>();
+    int fid = js["fid"].get<int>();
+    _friendModel.insert(uid, fid); // 添加好友信息到数据库中
 }
 
 void ChatService::exceptExit()
