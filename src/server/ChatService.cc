@@ -1,4 +1,5 @@
 #include "ChatService.hpp"
+#include "Group.hpp"
 #include "User.hpp"
 #include <muduo/base/Logging.h>
 #include <mutex>
@@ -16,7 +17,9 @@ ChatService::ChatService()
     _MsgHandlerMap.insert({ EnMsgType::LOGIN_MSG, bind(&ChatService::login, this, _1, _2, _3) });
     _MsgHandlerMap.insert({ EnMsgType::REG_MSG, bind(&ChatService::reg, this, _1, _2, _3) });
     _MsgHandlerMap.insert({ EnMsgType::ONE_CHAT_MSG, bind(&ChatService::oneChat, this, _1, _2, _3) });
-
+    _MsgHandlerMap.insert({ EnMsgType::CREATE_GROUP_MSG, bind(&ChatService::createGroup, this, _1, _2, _3) });
+    _MsgHandlerMap.insert({ EnMsgType::ADD_GROUP_MSG, bind(&ChatService::addGroup, this, _1, _2, _3) });
+    _MsgHandlerMap.insert({ EnMsgType::GROUP_CHAT_MSG, bind(&ChatService::GroupChat, this, _1, _2, _3) });
 }
 
 // 获取消息对应的处理函数
@@ -64,9 +67,9 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
             respone["id"] = user.getId();
             respone["name"] = user.getName();
             vector<string> offlineMsgs = _offlineMsgModel.query(user.getId());
-            if(!offlineMsgs.empty()) { // 如果离线消息不为空， 就发送出去
+            if (!offlineMsgs.empty()) { // 如果离线消息不为空， 就发送出去
                 // 如果这个用户有离线消息， 就把这个用户的离线消息发送给这个用户， 并从数据库删除掉
-                _offlineMsgModel.remove(user.getId()); 
+                _offlineMsgModel.remove(user.getId());
                 respone["offlinemsg"] = offlineMsgs;
             }
         }
@@ -138,11 +141,80 @@ void ChatService::oneChat(const TcpConnectionPtr& conn, json& js, Timestamp time
     // 用户不在线， 存储离线消息
     // TODO  后边需要修改， 因为用户可能连接的不是这台主机 而是集群的其他主机
     _offlineMsgModel.insert(toid, js.dump());
-
 }
 /*
 {"msgid" : 3, "name" : "yu", "password" : "123456"}
 {"msgid" : 1, "id" : 2, "password" : "123456"}
 {"msgid" : 5, "fromid" : 1, "toid" : 2, "msg" : "hello3"}
 
-*/ 
+*/
+
+// 处理建群消息
+void ChatService::createGroup(const TcpConnectionPtr& conn, json& js, Timestamp time)
+{
+    int userid = js["id"].get<int>();
+    string groupName = js["name"];
+    string groupDesc = js["desc"];
+    Group group;
+    group.setName(groupName);
+    group.setDesc(groupDesc);
+    json respone;
+    respone["msgid"] = EnMsgType::CREATE_GROUP_MSG_ACK;
+    if (_groupModel.createGroup(group)) { // 先创建群
+        if (_groupModel.addGroup(userid, group.getId(), "creator")) {
+            // 添加创建群组的人到群组中, 身份为creator
+            respone["errno"] = 0;
+            respone["gid"] = group.getId();
+
+        } else {
+            respone["errno"] = 2;
+            respone["errmsg"] = "add group error";
+        }
+
+    } else {
+        respone["errno"] = 1;
+        respone["errmsg"] = "create group error";
+    }
+    conn->send(respone.dump());
+}
+// 处理加群消息
+void ChatService::addGroup(const TcpConnectionPtr& conn, json& js, Timestamp time)
+{
+    int userid = js["uid"].get<int>();
+    int groupid = js["gid"].get<int>();
+    json respone;
+    respone["msgid"] = EnMsgType::ADD_GROUP_MSG_ACK;
+    if(_groupModel.addGroup(userid, groupid, "normal")) {
+        respone["errno"] = 0;
+
+    } else {
+        respone["errno"] = 1;
+        respone["errmsg"] = "add group error";
+    }
+
+    conn->send(respone.dump());
+}
+// 处理群聊消息
+void ChatService::GroupChat(const TcpConnectionPtr& conn, json& js, Timestamp time) { 
+    int userid = js["uid"].get<int>();
+    int groupid = js["gid"].get<int>();
+
+    vector<int> userIds = _groupModel.queryGroupUsers(groupid, userid);
+
+    lock_guard<mutex> guard(_connMutex); // 加锁保证map线程安全
+    for(int id : userIds) {
+
+        if(_userConnMap.count(id)) { // 如果用户在线，就转发消息
+            _userConnMap[id]->send(js.dump());
+        } else {
+            _offlineMsgModel.insert(id, js.dump());
+        }
+
+    }
+
+}
+
+void ChatService::exceptExit()
+{
+    _userModel.resetState();
+}

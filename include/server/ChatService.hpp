@@ -4,6 +4,7 @@
 #include <functional>
 #include <muduo/net/TcpServer.h>
 #include <mutex>
+#include "GroupModel.hpp"
 #include "OfflineMsgModel.hpp"
 #include "json.hpp"
 #include "UserModel.hpp"
@@ -32,10 +33,20 @@ public:
     void reg(const TcpConnectionPtr &conn ,json& js, Timestamp time);
     // 处理私聊消息
     void oneChat(const TcpConnectionPtr &conn ,json& js, Timestamp time);
+    // 处理建群消息
+    void createGroup(const TcpConnectionPtr &conn ,json& js, Timestamp time);
+    // 处理加群消息
+    void addGroup(const TcpConnectionPtr &conn ,json& js, Timestamp time);
+    // 处理群聊消息
+    void GroupChat(const TcpConnectionPtr &conn ,json& js, Timestamp time);
     // 获取消息对应的处理函数
     MsgHandler getHandler(EnMsgType msgId);
+    
+    // 处理程序异常退出
+    void exceptExit();
 private:
     ChatService();
+    ChatService(const ChatService&) = delete;
     //消息类型对应处理器
     unordered_map<EnMsgType, MsgHandler> _MsgHandlerMap;
     // 用户 id 对应连接
@@ -44,5 +55,6 @@ private:
     mutex _connMutex;
     UserModel _userModel;
     OfflineMsgModel _offlineMsgModel;
+    GroupModel _groupModel;
 
 };  
