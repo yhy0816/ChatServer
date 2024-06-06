@@ -35,7 +35,7 @@ public:
     {
         sockaddr_in addr;
         addr.sin_family = AF_INET;
-        inet_pton(AF_INET, ip.c_str(), &addr.sin_addr);
+        inet_pton(AF_INET, ip.c_str(), &addr.sin_addr.s_addr);
         addr.sin_port = htons(port);
         return connect(sock, (sockaddr*)&addr, sizeof addr) == 0;
     }
