@@ -74,8 +74,9 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
             if (!offlineMsgs.empty()) { // 如果离线消息不为空， 就发送出去
                 // 如果这个用户有离线消息， 就把这个用户的离线消息发送给这个用户， 并从数据库删除掉
                 _offlineMsgModel.remove(user.getId());
-                respone["offlinemsg"] = offlineMsgs;
+                
             }
+            respone["offlinemsg"] = offlineMsgs;
             // 查询这个用户的好友信息并返回
             vector<User> friends = _friendModel.query(user.getId());
             vector<json> jfriends;
@@ -87,6 +88,8 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
                 jfriends.push_back(js);
             }
             respone["friends"] = jfriends;
+
+            // TODO 查询这个用户的群组信息并返回
         }
 
     } else {
@@ -114,7 +117,7 @@ void ChatService::reg(const TcpConnectionPtr& conn, json& js, Timestamp time)
         respone["id"] = user.getId();
     } else {
         respone["errno"] = 1;
-        respone["errno"] = "注册失败, 请重试";
+        respone["errmsg"] = "用户名已存在, 注册失败, 请重试";
     }
     conn->send(respone.dump()); // 发送响应消息回去
 }
