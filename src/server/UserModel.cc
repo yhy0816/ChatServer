@@ -1,6 +1,6 @@
 #include "UserModel.hpp"
 #include "MySQL.hpp"
-#include <iostream>
+#include <muduo/base/Logging.h>
 #include <mysql/mysql.h>
 // using namespace std;
 
@@ -49,6 +49,7 @@ bool UserModel::updateState(const User& user) {
 
     sprintf(sql, "update User set state = '%s' where id = %d",
             user.getState().c_str(), user.getId());
+    // LOG_INFO << sql;
     MySQL mysql;
 
     return mysql.connect() && mysql.update(sql); // 连接并且执行 sql 

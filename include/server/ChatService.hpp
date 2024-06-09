@@ -42,6 +42,9 @@ public:
     void groupChat(const TcpConnectionPtr &conn ,json& js, Timestamp time);
     // 处理同意好友请求的消息
     void agreeFriendRequest(const TcpConnectionPtr &conn ,json& js, Timestamp time);
+    //处理注销消息
+    void logout(const TcpConnectionPtr &conn ,json& js, Timestamp time);
+
     // 获取消息对应的处理函数
     MsgHandler getHandler(EnMsgType msgId);
     

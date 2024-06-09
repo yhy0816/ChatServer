@@ -46,7 +46,8 @@ void ChatServer::onMessage(const TcpConnectionPtr& conn,
     try{
         js = json::parse(buff);
     } catch (...) {
-        LOG_INFO << "解析 json 错误";
+        LOG_INFO << "解析 json 错误 : " << buff;
+
         return;
     }
     

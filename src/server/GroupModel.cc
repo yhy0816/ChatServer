@@ -58,7 +58,7 @@ vector<Group> GroupModel::queryGroups(int userid)
     // 然后查这个用户所属的组内都有哪些用户
     for (Group& g : groups) {
         char sql[1024];
-        sprintf(sql, "select User.id, User.name, User.state from User "
+        sprintf(sql, "select User.id, User.name, User.state, GroupUser.grouprole from User "
                      "join GroupUser on User.id = GroupUser.userid where GroupUser.groupid = %d",
             g.getId());
 
@@ -71,7 +71,7 @@ vector<Group> GroupModel::queryGroups(int userid)
                 guser.setId(atoi(row[0]));
                 guser.setName(row[1]);
                 guser.setState(row[2]);
-                guser.setRole(row[2]);
+                guser.setRole(row[3]);
                 g.getMembers().push_back(guser);
             }
             mysql_free_result(res);

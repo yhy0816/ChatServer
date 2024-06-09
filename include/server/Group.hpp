@@ -19,7 +19,7 @@ public:
     void setId(int id) {this->id = id;;}
     void setName(const string& name) {this->name = name;}
     void setDesc(const string& desc) {this->desc = desc;}
-    vector<GroupUser> &getMembers() {return members;}  
+    vector<GroupUser> &getMembers()  {return members;}  
 
 protected:
     int id;

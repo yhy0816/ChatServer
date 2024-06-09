@@ -15,6 +15,8 @@ ChatService* ChatService::instance()
 ChatService::ChatService()
 {
     _MsgHandlerMap.insert({ EnMsgType::LOGIN_MSG, bind(&ChatService::login, this, _1, _2, _3) });
+    _MsgHandlerMap.insert({ EnMsgType::LOGOUT_MSG, bind(&ChatService::logout, this, _1, _2, _3) });
+
     _MsgHandlerMap.insert({ EnMsgType::REG_MSG, bind(&ChatService::reg, this, _1, _2, _3) });
     _MsgHandlerMap.insert({ EnMsgType::ONE_CHAT_MSG, bind(&ChatService::oneChat, this, _1, _2, _3) });
     _MsgHandlerMap.insert({ EnMsgType::CREATE_GROUP_MSG, bind(&ChatService::createGroup, this, _1, _2, _3) });
@@ -39,6 +41,20 @@ MsgHandler ChatService::getHandler(EnMsgType msgId)
     }
 
     return _MsgHandlerMap[msgId];
+}
+//处理注销业务
+void ChatService::logout(const TcpConnectionPtr &conn ,json& js, Timestamp time) {
+    int id = js["id"].get<int>();
+    User user(id, "", "", "offline");
+    _userModel.updateState(user);
+
+    {
+        lock_guard<mutex> guard(_connMutex);
+        auto it = _userConnMap.find(id);
+        if(it != _userConnMap.end()) {
+            _userConnMap.erase(it);
+        }
+    }
 }
 
 // 处理登录业务
@@ -89,7 +105,30 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
             }
             respone["friends"] = jfriends;
 
-            // TODO 查询这个用户的群组信息并返回
+            //  查询这个用户的群组信息并返回
+            vector<Group> groups = _groupModel.queryGroups(user.getId());
+            vector<json> jgroups;
+            jgroups.reserve(groups.size());
+            for(auto& g : groups) {
+                json groupjs;
+                groupjs["gid"] = g.getId();
+                groupjs["gname"] = g.getName();
+                groupjs["gdesc"] = g.getDesc();
+                vector<json> groupUserJss;
+                groupUserJss.reserve(groups.size());
+                for(const auto& it : g.getMembers()) {
+                    json groupUserJs;
+                    groupUserJs["guid"] = it.getId();
+                    groupUserJs["guname"] = it.getName();
+                    groupUserJs["gustate"] = it.getState();
+                    groupUserJs["gurole"] = it.getRole();
+                    groupUserJss.push_back(groupUserJs);
+                }
+                groupjs["gmembers"] = groupUserJss;
+                jgroups.push_back(groupjs);
+            }
+            respone["groups"] = jgroups;
+
         }
 
     } else {
@@ -195,6 +234,7 @@ void ChatService::createGroup(const TcpConnectionPtr& conn, json& js, Timestamp 
     }
     conn->send(respone.dump());
 }
+
 // 处理加群消息
 void ChatService::addGroup(const TcpConnectionPtr& conn, json& js, Timestamp time)
 {
