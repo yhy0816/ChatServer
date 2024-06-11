@@ -5,11 +5,14 @@
 #include "User.hpp"
 #include "json.hpp"
 #include <arpa/inet.h>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
 #include <functional>
 #include <iostream>
+#include <mutex>
 #include <netinet/in.h>
 #include <string>
 #include <sys/socket.h>
@@ -21,7 +24,7 @@
 using namespace nlohmann;
 using namespace std;
 const string SERVER_IP = "127.0.0.1";
-const short SERVER_PORT = 9000;
+const short SERVER_PORT = 8000;
 class ChatClient;
 
 // 对 socket 进行封装
@@ -83,7 +86,20 @@ public:
         respHandlerMap.insert({ EnMsgType::ONE_CHAT_MSG, std::bind(&ChatClient::oneChatHandler, this, _1) });
         respHandlerMap.insert({ EnMsgType::GROUP_CHAT_MSG, std::bind(&ChatClient::groupChatHandler, this, _1) });
         respHandlerMap.insert({ EnMsgType::FRIEND_REQUEST_MSG, std::bind(&ChatClient::frendRequestHandler, this, _1) });
+        respHandlerMap.insert({ EnMsgType::LOGIN_MSG_ACK, std::bind(&ChatClient::loginAckHandler, this, _1) });
+        respHandlerMap.insert({ EnMsgType::REG_MSG_ACK, std::bind(&ChatClient::createUserHandler, this, _1) });
+
+        
     }
+
+    void runReadMsgThread(){
+        // 启动接收数据的线程
+        if (readMsgThread == nullptr) {
+            readMsgThread = new thread(&ChatClient::readMsgHandler, this);
+            readMsgThread->detach();
+        }
+    }
+
     ~ChatClient()
     {
         if (readMsgThread) {
@@ -121,71 +137,25 @@ public:
             printf("\n你的群号为 %d\n", msgJs["gid"].get<int>());
         }
     }
-    void msgHandler(json& msgJs)
+    void createUserHandler(const json& msgJs)
     {
-
-        // cout << msgJs.dump() << endl;
-
-        auto it = respHandlerMap.find(msgJs.at("msgid").get<EnMsgType>());
-        // TODO 处理离线消息有问题
-        if (it == respHandlerMap.end()) {
-            if (msgJs["errno"].get<int>() != 0) {
-                printf("\n操作失败: %s\n", string(msgJs["errmsg"]).c_str());
-            } else {
-                printf("\n操作成功!!\n");
-            }
-
+        if (msgJs["errno"].get<int>() != 0) {
+            printf("\n注册失败: %s\n", string(msgJs["errmsg"]).c_str());
         } else {
-            it->second(msgJs);
+            printf("\n你的 id 号为 请保存好 %d\n", msgJs["id"].get<int>());
         }
+        cond.notify_all();
     }
 
-    void readMsgHandler()
+    void loginAckHandler(const json& responeJs)
     {
-        char buf[1024];
-        while (isloggedIn) {
-            memset(buf, 0, sizeof buf);
-            int recvLen = tcpClient.Recv(buf, sizeof buf);
-            if (recvLen <= 0) {
-                tcpClient.CloseConn();
-                exit(-1);
-            }
-            // cout << "收到" << buf << endl;
-            json msgJs = json::parse(buf);
-            msgHandler(msgJs);
-        }
-    }
 
-    bool getisloggedIn()
-    {
-        return isloggedIn;
-    }
-
-    bool login(int id, const string& pwd)
-    {
-        json loginJs;
-        loginJs["msgid"] = EnMsgType::LOGIN_MSG;
-        loginJs["id"] = id;
-        loginJs["password"] = pwd;
-
-        tcpClient.Send(loginJs.dump());
-
-        char respone[4096] = {};
-
-        tcpClient.Recv(respone, sizeof respone);
-
-        json responeJs = json::parse(respone);
-        // cout << respone << endl;
-        if (responeJs["msgid"] != EnMsgType::LOGIN_MSG_ACK) {
-
-            return false;
-        }
         if (responeJs["errno"] != 0) {
             cout << responeJs["errmsg"] << endl;
-            return false;
+            cond.notify_all();
+            return;
         }
-        isloggedIn = true;
-        cur_user.setId(id);
+        cur_user.setId(responeJs["id"].get<int>());
         cur_user.setName(responeJs["name"]);
         // cur_user.setPassword(pwd);
         // cur_user.setState("online");
@@ -222,13 +192,71 @@ public:
             groups.push_back(group);
         }
 
-        // 登录成功后启动接收数据的线程
-        if (readMsgThread == nullptr) {
-            readMsgThread = new thread(&ChatClient::readMsgHandler, this);
-            readMsgThread->detach();
-        }
+        isloggedIn = true;
+        cond.notify_all();
 
-        return true;
+    }
+
+    void msgHandler(json& msgJs)
+    {
+
+        // cout << msgJs.dump() << endl;
+
+        auto it = respHandlerMap.find(msgJs.at("msgid").get<EnMsgType>());
+        // TODO 处理离线消息有问题
+        if (it == respHandlerMap.end()) {
+            if (msgJs["errno"].get<int>() != 0) {
+                printf("\n操作失败: %s\n", string(msgJs["errmsg"]).c_str());
+            } else {
+                printf("\n操作成功!!\n");
+            }
+
+        } else {
+            it->second(msgJs);
+        }
+    }
+
+    void readMsgHandler()
+    {
+        char buf[1024 * 8];
+
+        while (1) {
+
+            memset(buf, 0, sizeof buf);
+            int recvLen;
+
+            recvLen = tcpClient.Recv(buf, sizeof buf);
+
+            if (recvLen <= 0) {
+                tcpClient.CloseConn();
+                exit(-1);
+            }
+            // cout << "收到" << buf << endl;
+            json msgJs = json::parse(buf);
+            msgHandler(msgJs);
+        }
+    }
+
+    bool getisloggedIn()
+    {
+        return isloggedIn;
+    }
+
+    bool login(int id, const string& pwd)
+    {
+        json loginJs;
+        loginJs["msgid"] = EnMsgType::LOGIN_MSG;
+        loginJs["id"] = id;
+        loginJs["password"] = pwd;
+
+        tcpClient.Send(loginJs.dump());
+
+
+        
+        unique_lock<mutex> lock(mtx);
+        cond.wait(lock);
+        return isloggedIn;
+        
     }
 
     void logout()
@@ -242,6 +270,7 @@ public:
         tcpClient.Send(logoutJs.dump());
 
         isloggedIn = false;
+
         cur_user.setId(-1);
         offlinemsg.clear();
         friends.clear();
@@ -311,36 +340,41 @@ public:
         tcpClient.Send(msgJs.dump());
     }
 
-    int regist(const string& name, const string& pwd)
+    void regist(const string& name, const string& pwd)
     {
         json regJs;
         regJs["msgid"] = EnMsgType::REG_MSG;
         regJs["name"] = name;
         regJs["password"] = pwd;
         tcpClient.Send(regJs.dump());
+        unique_lock<mutex> lock(mtx);
+        cond.wait(lock);
+        // char respone[4096] = {};
+        // tcpClient.Recv(respone, sizeof respone);
+        // json responeJs = json::parse(respone);
 
-        char respone[4096] = {};
-        tcpClient.Recv(respone, sizeof respone);
-        json responeJs = json::parse(respone);
+        // if (responeJs["msgid"].get<EnMsgType>() != EnMsgType::REG_MSG_ACK) {
+        //     return -1;
+        // }
 
-        if (responeJs["msgid"].get<EnMsgType>() != EnMsgType::REG_MSG_ACK) {
-            return -1;
-        }
-
-        // cout << responeJs.dump() << endl;
-        if (responeJs["errno"].get<int>() != 0) {
-            cout << responeJs["errmsg"] << endl;
-            return -1;
-        }
-        return responeJs["id"].get<int>();
+        // // cout << responeJs.dump() << endl;
+        // if (responeJs["errno"].get<int>() != 0) {
+        //     cout << responeJs["errmsg"] << endl;
+        //     return -1;
+        // }
+        
+        // return responeJs["id"].get<int>();
     }
     void showInfo()
     {
         cout << "-------------当前登录用户--------------" << endl;
         printf("用户 id: %d, 用户名: %s\n", cur_user.getId(), cur_user.getName().c_str());
-        if(!friends.empty())showFrined();
-        if(!groups.empty())showGroup();
-        if(!offlinemsg.empty())showOfflinemsg();
+        if (!friends.empty())
+            showFrined();
+        if (!groups.empty())
+            showGroup();
+        if (!offlinemsg.empty())
+            showOfflinemsg();
     }
     void showFrined()
     {
@@ -357,10 +391,9 @@ public:
             cout << gro.getId() << " " << gro.getName() << " " << gro.getDesc() << endl;
             for (const auto& guser : gro.getMembers()) {
                 printf("    [%d] [%s] %s : %s\n", guser.getId(),
-                                    guser.getState().c_str(),
-                                    guser.getName().c_str(), 
-                                    guser.getRole().c_str()
-                                    );
+                    guser.getState().c_str(),
+                    guser.getName().c_str(),
+                    guser.getRole().c_str());
             }
         }
     }
@@ -379,7 +412,7 @@ public:
     }
 
 private:
-    bool isloggedIn = false;
+    bool isloggedIn;
     thread* readMsgThread = nullptr;
     TcpClient tcpClient;
     vector<json> offlinemsg;
@@ -387,6 +420,8 @@ private:
     vector<User> friends;
     vector<Group> groups;
     unordered_map<EnMsgType, function<void(const json&)>> respHandlerMap;
+    condition_variable cond;
+    mutex mtx;
 };
 
 ChatClient chatClient;
@@ -435,11 +470,8 @@ void regist()
     cout << "password: ";
     string password;
     getline(cin, password);
+    chatClient.regist(name, password);
 
-    int id = chatClient.regist(name, password);
-    if (id != -1) {
-        cout << "你的用户 id 为 " << id << "，请保存好" << endl;
-    }
 }
 
 void drawMainMenu()
@@ -590,7 +622,7 @@ int main()
         cout << "连接服务器失败！！" << endl;
         return 1;
     }
-
+    chatClient.runReadMsgThread();
     while (1) {
         drawMainMenu();
         cout << "choise: ";

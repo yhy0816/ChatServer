@@ -2,7 +2,8 @@
 #include <csignal>
 #include <muduo/net/EventLoop.h>
 #include <muduo/net/InetAddress.h>
-#include <signal.h>
+#include <csignal>
+#include <iostream>
 #include "ChatServer.hpp"
 #include "ChatService.hpp"
 
@@ -14,11 +15,18 @@ void reset(int sig) {
     exit(0);
 }
 
-int main() {
-// TODO 处理 crtl + c 的信号
+int main(int argc, char* argv[]) {
+    if(argc != 3) {
+        cout << "参数形式 ChatServer ip port" << endl;
+        return 1;
+    }
+    string ip = argv[1];
+    int port = atoi(argv[2]);
+
+//  处理 crtl + c 的信号
     signal(SIGINT, reset);
     EventLoop loop;
-    InetAddress addr("127.0.0.1", 9000);
+    InetAddress addr(ip, port);
     ChatServer server(&loop, addr, "server");
     server.start();
     loop.loop();
