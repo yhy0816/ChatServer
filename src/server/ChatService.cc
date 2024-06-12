@@ -14,6 +14,7 @@ ChatService* ChatService::instance()
 
 ChatService::ChatService()
 {
+    using namespace placeholders;
     _MsgHandlerMap.insert({ EnMsgType::LOGIN_MSG, bind(&ChatService::login, this, _1, _2, _3) });
     _MsgHandlerMap.insert({ EnMsgType::LOGOUT_MSG, bind(&ChatService::logout, this, _1, _2, _3) });
 
@@ -25,9 +26,20 @@ ChatService::ChatService()
      // 这里把好友请求消息也交给私聊消息进行处理
     _MsgHandlerMap.insert({ EnMsgType::FRIEND_REQUEST_MSG, bind(&ChatService::oneChat, this, _1, _2, _3)} );
     _MsgHandlerMap.insert({ EnMsgType::FRIEND_AGREE_MSG, bind(&ChatService::agreeFriendRequest, this, _1, _2, _3)} );
-
+    if(_redis.connect()) {
+        _redis.init_notify_handler(std::bind(&ChatService::redisSubscribeHandler, this, _1, _2));
+    }
 }
 
+void ChatService::redisSubscribeHandler(int id, const string& msg) {
+    lock_guard<mutex> guard(_connMutex);
+    auto it = _userConnMap.find(id);
+    if(it == _userConnMap.end()) { // 用户在消息从 redis 推送过来的过程中给下线了
+        _offlineMsgModel.insert(id, msg);
+    } else {
+        it->second->send(msg);
+    }
+}
 // 获取消息对应的处理函数
 MsgHandler ChatService::getHandler(EnMsgType msgId)
 {
@@ -46,8 +58,7 @@ MsgHandler ChatService::getHandler(EnMsgType msgId)
 void ChatService::logout(const TcpConnectionPtr &conn ,json& js, Timestamp time) {
     int id = js["id"].get<int>();
     User user(id, "", "", "offline");
-    _userModel.updateState(user);
-
+    
     {
         lock_guard<mutex> guard(_connMutex);
         auto it = _userConnMap.find(id);
@@ -55,6 +66,10 @@ void ChatService::logout(const TcpConnectionPtr &conn ,json& js, Timestamp time)
             _userConnMap.erase(it);
         }
     }
+
+    _userModel.updateState(user);
+    // 下线了就解除对这个用户id 的订阅
+    _redis.unsubscribe(id);
 }
 
 // 处理登录业务
@@ -75,14 +90,20 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
             respone["errno"] = 2;
             respone["errmsg"] = "该账号已经登录, 请重新输入账号";
         } else {
+            // 登录成功
             {
                 lock_guard<mutex> _guard(_connMutex); // 守卫锁, 保证哈希表线程安全
                 // 保存这个id 用户的连接
                 _userConnMap.insert({ user.getId(), conn });
             }
+            
             // 要更新登录状态为 online
             user.setState("online");
             _userModel.updateState(user);
+
+            //向 redis 订阅这个用户消息
+            _redis.subscribe(user.getId());
+
             respone["errno"] = 0;
             respone["id"] = user.getId();
             respone["name"] = user.getName();
@@ -175,10 +196,11 @@ void ChatService::clientCloseException(const TcpConnectionPtr& conn)
             }
         }
     }
-
+    
     if (user.getId() != -1) { // 如果查找到了这个用户连接就更新为离线
         user.setState("offline");
         _userModel.updateState(user);
+        _redis.unsubscribe(user.getId());
     }
 }
 
@@ -190,21 +212,25 @@ void ChatService::oneChat(const TcpConnectionPtr& conn, json& js, Timestamp time
         lock_guard<mutex> guard(_connMutex);
         auto toConn = _userConnMap.find(toid);
         if (toConn != _userConnMap.end()) {
-            // 用户在线， 转发消息
+            // 用户在这台主机上在线， 转发消息
             toConn->second->send(js.dump());
             return;
         }
     }
-    // 用户不在线， 存储离线消息
-    // TODO  后边需要修改， 因为用户可能连接的不是这台主机 而是集群的其他主机
-    _offlineMsgModel.insert(toid, js.dump());
-}
-/*
-{"msgid" : 3, "name" : "yu", "password" : "123456"}
-{"msgid" : 1, "id" : 2, "password" : "123456"}
-{"msgid" : 5, "fromid" : 1, "toid" : 2, "msg" : "hello3"}
 
-*/
+    //用户可能连接的不是这台主机 而是集群的其他主机
+    User user = _userModel.query(toid);
+
+    if(user.getState() == "offline") {
+        // 用户不在线， 存储离线消息
+        _offlineMsgModel.insert(toid, js.dump());
+    } else {
+        // 用户在其他服务器上登录
+        _redis.publish(toid, js.dump());
+    }
+      
+}
+
 
 // 处理建群消息
 void ChatService::createGroup(const TcpConnectionPtr& conn, json& js, Timestamp time)
@@ -262,10 +288,15 @@ void ChatService::groupChat(const TcpConnectionPtr& conn, json& js, Timestamp ti
     lock_guard<mutex> guard(_connMutex); // 加锁保证map线程安全
     for(int id : userIds) {
 
-        if(_userConnMap.count(id)) { // 如果用户在线，就转发消息
+        if(_userConnMap.count(id)) { // 如果用户这台主机在线，就转发消息
             _userConnMap[id]->send(js.dump());
         } else {
-            _offlineMsgModel.insert(id, js.dump());
+            if(_userModel.query(id).getState() == "offline") { // 确实离线就保存离线消息
+                _offlineMsgModel.insert(id, js.dump());
+            } else { // 否则发送到 redis
+                _redis.publish(id, js.dump());
+            }
+            
         }
 
     }

@@ -1,7 +1,6 @@
 #pragma once
 #include <muduo/net/Callbacks.h>
 #include <unordered_map>
-#include <functional>
 #include <muduo/net/TcpServer.h>
 #include <mutex>
 #include "json.hpp"
@@ -10,6 +9,7 @@
 #include "FriendModel.hpp"
 #include "UserModel.hpp"
 #include "MsgType.hpp"
+#include "Redis.hpp"
 
 using namespace muduo;
 using namespace muduo::net;
@@ -44,10 +44,11 @@ public:
     void agreeFriendRequest(const TcpConnectionPtr &conn ,json& js, Timestamp time);
     //处理注销消息
     void logout(const TcpConnectionPtr &conn ,json& js, Timestamp time);
-
     // 获取消息对应的处理函数
     MsgHandler getHandler(EnMsgType msgId);
     
+    // 处理redis 接收到的消息的回调
+    void redisSubscribeHandler(int id, const string& msg);
     // 处理程序异常退出
     void exceptExit();
 private:
@@ -63,4 +64,5 @@ private:
     OfflineMsgModel _offlineMsgModel;
     GroupModel _groupModel;
     FriendModel _friendModel;
+    Redis _redis;
 };  

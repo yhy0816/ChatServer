@@ -137,6 +137,7 @@ public:
             printf("\n你的群号为 %d\n", msgJs["gid"].get<int>());
         }
     }
+    
     void createUserHandler(const json& msgJs)
     {
         if (msgJs["errno"].get<int>() != 0) {
@@ -149,7 +150,7 @@ public:
 
     void loginAckHandler(const json& responeJs)
     {
-
+        
         if (responeJs["errno"] != 0) {
             cout << responeJs["errmsg"] << endl;
             cond.notify_all();
@@ -191,7 +192,7 @@ public:
             }
             groups.push_back(group);
         }
-
+        lock_guard<mutex> guard(mutex);
         isloggedIn = true;
         cond.notify_all();
 
@@ -239,6 +240,7 @@ public:
 
     bool getisloggedIn()
     {
+        lock_guard<mutex> guard(mtx);
         return isloggedIn;
     }
 
@@ -261,15 +263,21 @@ public:
 
     void logout()
     {
-        if (isloggedIn == false)
-            return;
 
+        {
+            lock_guard<mutex> guard(mtx);
+            if (isloggedIn == false)
+                return;
+        }
+        
         json logoutJs;
         logoutJs["msgid"] = EnMsgType::LOGOUT_MSG;
         logoutJs["id"] = cur_user.getId();
         tcpClient.Send(logoutJs.dump());
-
-        isloggedIn = false;
+        {
+            lock_guard<mutex> guard(mtx);
+            isloggedIn = false;
+        }
 
         cur_user.setId(-1);
         offlinemsg.clear();
