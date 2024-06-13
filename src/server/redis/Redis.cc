@@ -1,5 +1,4 @@
 #include "Redis.hpp"
-#include <cstddef>
 #include <hiredis/hiredis.h>
 #include <iostream>
 #include <thread>
