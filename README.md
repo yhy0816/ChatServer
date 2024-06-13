@@ -6,7 +6,7 @@
 - src 源文件目录
 - thirdparty 第三方依赖文件
 - autobuild.sh 编译脚本
-- create 创建数据库脚本
+- create.sql 创建数据库脚本
 
 ## 依赖环境 
 
