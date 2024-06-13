@@ -26,7 +26,7 @@ stream {
         # weight 都为 1 基于轮询的方式
         # max_fails 心跳机制允许的最大失败次数
         # fail_timeout 心跳机制超时时间
-        IP1:PORT1 集群服务器 ip + 端口
+        # IP1:PORT1 集群服务器 ip + 端口
         server IP1:PORT1 weight=1 max_fails=3 fail_timeout=30s;
         server IP2:PORT2 weight=1 max_fails=3 fail_timeout=30s;
     }
