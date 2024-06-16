@@ -8,6 +8,3 @@ rm -r `pwd`/build/*
 
 cd `pwd`/build &&  cmake .. && make
 
-
-
-
