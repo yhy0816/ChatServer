@@ -1,7 +1,8 @@
 #include "UserModel.hpp"
-#include "MySQL.hpp"
+// #include "MySQL.hpp"
 #include <muduo/base/Logging.h>
 #include <mysql/mysql.h>
+#include "ConnectionPool.hpp"
 // using namespace std;
 
 bool UserModel::insert(User& user)
@@ -10,12 +11,18 @@ bool UserModel::insert(User& user)
 
     sprintf(sql, "insert into User(name, password, state) values('%s', '%s', '%s')",
         user.getName().c_str(), user.getPassword().c_str(), user.getState().c_str());
-    MySQL mysql;
-    if(mysql.connect()) {
-        if(mysql.update(sql)) {
-            user.setId(mysql_insert_id(mysql.getConnection()));
-            return true;
-        }
+    // MySQL mysql;
+    // if(mysql.connect()) {
+    //     if(mysql.update(sql)) {
+    //         user.setId(mysql_insert_id(mysql.getConnection()));
+    //         return true;
+    //     }
+    // }
+
+    shared_ptr<MySqlConn> conn = ConnectionPool::getInstance().getConnection();
+    if(conn->update(sql)) {
+        user.setId(mysql_insert_id(conn->getConnection()));
+        return true;
     }
     return false;
 }
@@ -26,20 +33,33 @@ User UserModel::query(int id) {
 
     sprintf(sql, "select id, name, password, state from User where id = %d", id);
 
-    MySQL mysql;
+    // MySQL mysql;
     User user;
-    if(mysql.connect()) {
-        MYSQL_RES* result = mysql.query(sql);
-        if(result) {
-            MYSQL_ROW row = mysql_fetch_row(result);
-            if(row) {
-                user.setId(atoi(row[0]));
-                user.setName(row[1]);
-                user.setPassword(row[2]);
-                user.setState(row[3]);
-                mysql_free_result(result);  
-            }     
-        }
+    // if(mysql.connect()) {
+    //     MYSQL_RES* result = mysql.query(sql);
+    //     if(result) {
+    //         MYSQL_ROW row = mysql_fetch_row(result);
+    //         if(row) {
+    //             user.setId(atoi(row[0]));
+    //             user.setName(row[1]);
+    //             user.setPassword(row[2]);
+    //             user.setState(row[3]);
+    //             mysql_free_result(result);  
+    //         }     
+    //     }
+    // }
+
+    shared_ptr<MySqlConn> conn = ConnectionPool::getInstance().getConnection();
+    MYSQL_RES* result = conn->query(sql);
+    if(result) {
+        MYSQL_ROW row = mysql_fetch_row(result);
+        if(row) {
+            user.setId(atoi(row[0]));
+            user.setName(row[1]);
+            user.setPassword(row[2]);
+            user.setState(row[3]);
+            mysql_free_result(result);  
+        }     
     }
     return user;
 }
@@ -50,13 +70,18 @@ bool UserModel::updateState(const User& user) {
     sprintf(sql, "update User set state = '%s' where id = %d",
             user.getState().c_str(), user.getId());
     // LOG_INFO << sql;
-    MySQL mysql;
+    // MySQL mysql;
 
-    return mysql.connect() && mysql.update(sql); // 连接并且执行 sql 
+    // return mysql.connect() && mysql.update(sql); // 连接并且执行 sql 
+
+    shared_ptr<MySqlConn> conn = ConnectionPool::getInstance().getConnection();
+    return conn->update(sql);
 }
 
 void UserModel::resetState() {
     char sql[1024] = "update User set state = 'offline' where state = 'online'";
-    MySQL mysql;
-    mysql.connect() && mysql.update(sql); 
+    // MySQL mysql;
+    // mysql.connect() && mysql.update(sql); 
+    shared_ptr<MySqlConn> conn = ConnectionPool::getInstance().getConnection();
+    conn->update(sql);
 }

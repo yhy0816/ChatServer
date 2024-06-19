@@ -88,6 +88,7 @@ public:
         respHandlerMap.insert({ EnMsgType::FRIEND_REQUEST_MSG, std::bind(&ChatClient::frendRequestHandler, this, _1) });
         respHandlerMap.insert({ EnMsgType::LOGIN_MSG_ACK, std::bind(&ChatClient::loginAckHandler, this, _1) });
         respHandlerMap.insert({ EnMsgType::REG_MSG_ACK, std::bind(&ChatClient::createUserHandler, this, _1) });
+        respHandlerMap.insert({ EnMsgType::CREATE_GROUP_MSG_ACK, std::bind(&ChatClient::createGroupHandler, this, _1) });
 
         
     }

@@ -16,4 +16,5 @@ public:
     MYSQL* getConnection() const {return _conn;}
 private:
     MYSQL* _conn;
+    
 };

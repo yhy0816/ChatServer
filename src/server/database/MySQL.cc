@@ -1,6 +1,7 @@
 #include "MySQL.hpp"
 #include <mysql/mysql.h>
 #include <muduo/base/Logging.h>
+
 static string server = "127.0.0.1";
 static string user = "root";
 static string password = "123456";
