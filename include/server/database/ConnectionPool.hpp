@@ -23,9 +23,9 @@ private:
     mutex _queMutex;
     int _connCount = 0; // 记录当前所有连接的数量，包括分配出去的
 
-    int _init_size = 5;
-    int _min_size = 5;
-    int _max_size = 128;
-    seconds _maxIdleTime = seconds( 10); // 连接的最大空闲时间 60 秒
+    int _init_size = 5; // 初始连接数量
+    int _min_size = 5; // 最小连接数量
+    int _max_size = 128; // 最大连接数量
+    seconds _maxIdleTime = seconds( 10); // 连接的最大空闲时间 10 秒
     seconds _waitTimeout = seconds(1); // 申请连接的最大超时时间 1 秒
 };

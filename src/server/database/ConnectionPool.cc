@@ -52,12 +52,12 @@ void ConnectionPool::recycleConn() {
             if(conn->getIdleTime() > _maxIdleTime) {
                 delete conn;
                 _connQueue.pop();
-                LOG_INFO << "释放超时连接! 池内剩余" << _connQueue.size();
                 _connCount--;
             } else {
                 break;
             }
         }
+        LOG_INFO << "释放超时连接! 池内剩余" << _connQueue.size();
     }
 }
 
@@ -91,8 +91,8 @@ shared_ptr<MySqlConn> ConnectionPool::getConnection() {
     if(_connQueue.empty()) {
         _cond.notify_all();
     }
-    LOG_INFO << "池内剩余连接数: " << _connQueue.size()
-                << " 连接池总申请连接数: " << _connCount;
+    // LOG_INFO << "池内剩余连接数: " << _connQueue.size()
+    //             << " 连接池总申请连接数: " << _connCount;
 
     return sp;
 }
