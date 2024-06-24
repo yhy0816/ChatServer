@@ -1,4 +1,5 @@
 #include "ConnectionPool.hpp"
+#include <mutex>
 #include <thread>
 #include <muduo/base/Logging.h>
 using namespace std;
@@ -8,9 +9,13 @@ ConnectionPool& ConnectionPool::getInstance() {
     return connectionPool;
 }
 
-ConnectionPool::ConnectionPool() {
+ConnectionPool::ConnectionPool() : // 启动生产和消费线程
+        produceConnThread(&ConnectionPool::produceConn, this),
+        recycleConnThread(&ConnectionPool::recycleConn, this)
+{
     
-
+    produceConnThread.detach();
+    recycleConnThread.detach();
     // 创建_init_size个 连接
     for(int i = 0; i < _init_size; i++) {
         MySqlConn *conn =  new MySqlConn();
@@ -18,20 +23,16 @@ ConnectionPool::ConnectionPool() {
     }
     _connCount = _init_size;
 
-    // 启动生产和消费线程
-    thread(&ConnectionPool::produceConn, this).detach();
-    thread(&ConnectionPool::recycleConn, this).detach();
-
-
 }
 
 void ConnectionPool::produceConn() {
     
     while(1) {
-
+        if(isClose) return;
         unique_lock<mutex> lock(_queMutex);
         // 队列不空或者总链接计数大都不需要生产
         while(!_connQueue.empty() || _connCount >= _max_size) { 
+            if(isClose) return;
             _cond.wait(lock); // 释放锁并等待
         }
         MySqlConn* conn = new MySqlConn();
@@ -45,19 +46,26 @@ void ConnectionPool::produceConn() {
 void ConnectionPool::recycleConn() {
     
     while(1) {
-        std::this_thread::sleep_for(_maxIdleTime); // 每隔_maxAliveTime扫描一次
+        if(isClose) return; 
+        // std::this_thread::sleep_for(_maxIdleTime); // 每隔_maxAliveTime扫描一次
         unique_lock<mutex> lock(_queMutex);
+        while(_connQueue.empty() || _connQueue.size() <= _min_size) { 
+            if(isClose) return; 
+            _cond.wait(lock); // 释放锁并等待
+            
+        }
         while(_connQueue.size() > _min_size) {
             MySqlConn * conn = _connQueue.front();
             if(conn->getIdleTime() > _maxIdleTime) {
                 delete conn;
                 _connQueue.pop();
                 _connCount--;
+                LOG_INFO << "释放超时连接! 池内剩余" << _connQueue.size();
+
             } else {
                 break;
             }
         }
-        LOG_INFO << "释放超时连接! 池内剩余" << _connQueue.size();
     }
 }
 
@@ -97,3 +105,7 @@ shared_ptr<MySqlConn> ConnectionPool::getConnection() {
     return sp;
 }
 
+void ConnectionPool::close() {
+    this->isClose = true; // 设置关闭状态
+    _cond.notify_all();
+}
