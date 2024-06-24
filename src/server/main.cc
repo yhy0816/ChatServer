@@ -6,12 +6,15 @@
 #include <unistd.h>
 #include "ChatServer.hpp"
 #include "ChatService.hpp"
+#include "ConnectionPool.hpp"
 
 using namespace std;
 
 void reset(int sig) {
-    
+    // 数据库中恢复离线状态
     ChatService::instance()->exceptExit();
+    // 关闭连接池的生产消费线程
+    ConnectionPool::getInstance().close();
     exit(0);
 }
 
