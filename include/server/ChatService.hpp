@@ -2,7 +2,7 @@
 #include <muduo/net/Callbacks.h>
 #include <unordered_map>
 #include <muduo/net/TcpServer.h>
-#include <mutex>
+#include <shared_mutex>
 #include "json.hpp"
 #include "GroupModel.hpp"
 #include "OfflineMsgModel.hpp"
@@ -59,7 +59,7 @@ private:
     // 用户 id 对应连接
     unordered_map<int, TcpConnectionPtr> _userConnMap;
     // 用来保证 _userConnMap 线程安全
-    mutex _connMutex;
+    shared_mutex _connMutex;
     UserModel _userModel;
     OfflineMsgModel _offlineMsgModel;
     GroupModel _groupModel;

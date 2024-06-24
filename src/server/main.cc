@@ -1,9 +1,9 @@
-// #include <iostream>
 #include <csignal>
 #include <muduo/net/EventLoop.h>
 #include <muduo/net/InetAddress.h>
 #include <csignal>
 #include <iostream>
+#include <unistd.h>
 #include "ChatServer.hpp"
 #include "ChatService.hpp"
 
@@ -31,4 +31,3 @@ int main(int argc, char* argv[]) {
     server.start();
     loop.loop();
 }
-//{"msgid" : 1, "id": 1, "password": "123456"}

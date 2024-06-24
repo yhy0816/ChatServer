@@ -3,6 +3,7 @@
 #include "User.hpp"
 #include <muduo/base/Logging.h>
 #include <mutex>
+#include <shared_mutex>
 #include <vector>
 
 ChatService* ChatService::instance()
@@ -32,7 +33,8 @@ ChatService::ChatService()
 }
 
 void ChatService::redisSubscribeHandler(int id, const string& msg) {
-    lock_guard<mutex> guard(_connMutex);
+    // lock_guard<mutex> guard(_connMutex);
+    shared_lock<shared_mutex> slock(_connMutex); // 加读锁就可以了
     auto it = _userConnMap.find(id);
     if(it == _userConnMap.end()) { // 用户在消息从 redis 推送过来的过程中给下线了
         _offlineMsgModel.insert(id, msg);
@@ -60,7 +62,8 @@ void ChatService::logout(const TcpConnectionPtr &conn ,json& js, Timestamp time)
     User user(id, "", "", "offline");
     
     {
-        lock_guard<mutex> guard(_connMutex);
+        // lock_guard<mutex> guard(_connMutex);
+        unique_lock<shared_mutex> ulock(_connMutex); // 只是去哈希表查询， 读锁即可
         auto it = _userConnMap.find(id);
         if(it != _userConnMap.end()) {
             _userConnMap.erase(it);
@@ -92,7 +95,8 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
         } else {
             // 登录成功
             {
-                lock_guard<mutex> _guard(_connMutex); // 守卫锁, 保证哈希表线程安全
+                // lock_guard<mutex> _guard(_connMutex); // 守卫锁, 保证哈希表线程安全
+                unique_lock<shared_mutex> ulock(_connMutex); // 修改哈希表了，加写锁保证线程安全
                 // 保存这个id 用户的连接
                 _userConnMap.insert({ user.getId(), conn });
             }
@@ -187,7 +191,8 @@ void ChatService::clientCloseException(const TcpConnectionPtr& conn)
 {
     User user;
     {
-        lock_guard<mutex> _guard(_connMutex);
+        // lock_guard<mutex> _guard(_connMutex);
+        unique_lock<shared_mutex> ulock(_connMutex); // 加写锁
         for (auto it = _userConnMap.begin(); it != _userConnMap.end(); ++it) {
             if (conn == it->second) {
                 user.setId(it->first);
@@ -209,7 +214,8 @@ void ChatService::oneChat(const TcpConnectionPtr& conn, json& js, Timestamp time
     int toid = js["toid"].get<int>();
 
     {
-        lock_guard<mutex> guard(_connMutex);
+        // lock_guard<mutex> guard(_connMutex);
+        shared_lock<shared_mutex> slock(_connMutex);  // 聊天不需要修改表， 读锁即可
         auto toConn = _userConnMap.find(toid);
         if (toConn != _userConnMap.end()) {
             // 用户在这台主机上在线， 转发消息
@@ -285,7 +291,8 @@ void ChatService::groupChat(const TcpConnectionPtr& conn, json& js, Timestamp ti
 
     vector<int> userIds = _groupModel.queryGroupUsers(groupid, userid);
 
-    lock_guard<mutex> guard(_connMutex); // 加锁保证map线程安全
+    // lock_guard<mutex> guard(_connMutex); // 加锁保证map线程安全
+    shared_lock<shared_mutex> slock(_connMutex); // 加读锁就可以
     for(int id : userIds) {
 
         if(_userConnMap.count(id)) { // 如果用户这台主机在线，就转发消息

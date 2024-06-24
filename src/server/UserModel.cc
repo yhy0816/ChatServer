@@ -80,8 +80,8 @@ bool UserModel::updateState(const User& user) {
 
 void UserModel::resetState() {
     char sql[1024] = "update User set state = 'offline' where state = 'online'";
-    // MySQL mysql;
-    // mysql.connect() && mysql.update(sql); 
-    shared_ptr<MySqlConn> conn = ConnectionPool::getInstance().getConnection();
-    conn->update(sql);
+    MySQL mysql;
+    mysql.connect() && mysql.update(sql); 
+    // shared_ptr<MySqlConn> conn = ConnectionPool::getInstance().getConnection();
+    // conn->update(sql);
 }
